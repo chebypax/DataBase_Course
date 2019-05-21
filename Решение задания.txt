@@ -1,0 +1,305 @@
+CREATE SCHEMA IF NOT EXISTS `social_network` CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+use `social_network`;
+
+CREATE TABLE IF NOT EXISTS `user` (
+`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+`name` VARCHAR(30) NOT NULL,
+`lastname` VARCHAR(30) NOT NULL);
+
+CREATE TABLE IF NOT EXISTS `category` (
+`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+`name` VARCHAR(30) NOT NULL);
+
+
+INSERT INTO `users` (`name`, `lastname`) VALUES
+('Саша', 'Грей'),
+('Вася', 'Пупкин'),
+('Игорь', 'Серов'),
+('Полина', 'Гагарина'),
+('Александр', 'Друзь'),
+('Маша', 'Зеленова'),
+('Игорь', 'Крутой');
+
+
+CREATE TABLE IF NOT EXISTS `object` (
+`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+`user_id` INT NOT NULL,
+`category_id` INT NOT NULL,
+CONSTRAINT `object_user_fk` FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE CASCADE ON DELETE RESTRICT,
+CONSTRAINT `object_category_fk` FOREIGN KEY (`category_id`) REFERENCES `category`(`id`) ON UPDATE CASCADE ON DELETE RESTRICT);
+
+CREATE UNIQUE INDEX `object_key` ON `object` (`user_id`, `category_id`);
+
+
+CREATE TABLE IF NOT EXISTS `like` (
+`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+`object_id` INT NOT NULL,
+`sent_by` INT NOT NULL,
+CONSTRAINT `like_object_fk` FOREIGN KEY (`object_id`) REFERENCES `object`(`id`) ON UPDATE CASCADE ON DELETE RESTRICT,
+CONSTRAINT `like_sent_by_fk` FOREIGN KEY (`sent_by`) REFERENCES `user`(`id`) ON UPDATE CASCADE ON DELETE RESTRICT);
+
+CREATE UNIQUE INDEX `like_key` ON `like` (`object_id`, `sent_by`);
+
+
+
+
+#Задание 1. Процедура получения инфы о пользователе. В расчете взаимных лайков не учитываются лайки, поставленные самому себе 
+(например, в контакте можно поставить лайк самому себе)
+
+delimiter $$
+CREATE PROCEDURE `user_info` (userid INT)
+
+BEGIN
+
+DROP TABLE IF EXISTS T1;
+
+DROP TABLE IF EXISTS T2;
+
+DROP TABLE IF EXISTS T3;
+
+DROP TABLE IF EXISTS T4;
+
+DROP TABLE IF EXISTS T5;
+
+
+
+CREATE TEMPORARY TABLE T1 
+SELECT `user_id`, `object_id`, `sent_by`, `user`.`name`, `user`.`lastname` FROM `like` 
+
+INNER JOIN `object` ON (`like`.`object_id` = `object`.`id`)
+
+INNER JOIN `user` ON (`object`.`user_id` = `user`.`id`);
+
+
+
+#Ему поставили
+
+CREATE TEMPORARY TABLE T2
+SELECT * FROM T1 WHERE `user_id` = userid;
+
+
+#Он поставил
+CREATE TEMPORARY TABLE T3
+SELECT * FROM T1 WHERE `sent_by` = userid;
+
+
+CREATE TEMPORARY TABLE T4
+
+SELECT T2.`user_id`, T2.`sent_by` FROM T2 INNER JOIN T3 ON (T2.`sent_by` = T3.`user_id`) WHERE T2.`sent_by` != userid;
+
+
+SET @a := (SELECT `user_id` FROM T1 WHERE `user_id`=userid LIMIT 1 );
+
+SET @b := (SELECT `Name` FROM T1 WHERE `user_id`=userid LIMIT 1 );
+
+SET @c := (SELECT `Lastname` FROM T1 WHERE `user_id`=userid LIMIT 1 );
+
+SET @d := (SELECT COUNT(`user_id`) FROM T1 WHERE `user_id`=userid);
+
+SET @e := (SELECT COUNT(`user_id`) FROM (SELECT * FROM T1 WHERE `sent_by` = userid) AS T3);
+
+SET @f := (SELECT COUNT(*) FROM T4); 
+
+
+
+CREATE TEMPORARY TABLE IF NOT EXISTS `T5` (
+
+`id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+
+`ID пользователя` INT ,
+
+`Имя` VARCHAR (30) ,
+`Фамилия` VARCHAR (30) ,
+
+`Лайков получено` INT, 
+
+`Лайков поставлено` INT,
+`Взаимных лайков` INT );
+
+
+INSERT INTO `T5` (`ID пользователя`, `Имя`, `Фамилия`, `Лайков получено`, `Лайков поставлено`, `Взаимных лайков`) VALUES (@a, @b, @c, @d, @e, @f);
+
+
+SELECT * FROM T5;
+
+
+
+DROP TABLE IF EXISTS T1;
+
+DROP TABLE IF EXISTS T2;
+
+DROP TABLE IF EXISTS T3;
+
+DROP TABLE IF EXISTS T4;
+
+DROP TABLE IF EXISTS T5;
+
+
+END
+$$
+delimiter ;
+
+#Создание процедуры для задания 2 - вывод пользователей, которые поставили лайк двум пользователям, и не поставили третьему.
+delimiter $$
+
+CREATE PROCEDURE `abc` (userA INT, userB INT, userC INT)
+
+BEGIN
+
+DROP TABLE IF EXISTS T1;
+
+
+DROP TABLE IF EXISTS T2;
+
+DROP TABLE IF EXISTS T3;
+
+DROP TABLE IF EXISTS T4;
+
+DROP TABLE IF EXISTS T5;
+
+
+
+CREATE TEMPORARY TABLE T1 
+
+SELECT `user_id`, `object_id`, `sent_by`, `user`.`name`, `user`.`lastname` FROM `like` 
+
+INNER JOIN `object` ON (`like`.`object_id` = `object`.`id`)
+
+INNER JOIN `user` ON (`object`.`user_id` = `user`.`id`);
+
+
+
+CREATE TEMPORARY TABLE T2
+
+SELECT `sent_by` FROM T1 WHERE `user_id` = userC GROUP BY `sent_by`;
+
+
+
+CREATE TEMPORARY TABLE T3
+
+SELECT * FROM T1 WHERE `user_id` = userA;
+
+
+
+CREATE TEMPORARY TABLE T4
+
+SELECT * FROM T1 WHERE `user_id` = userB;
+
+
+
+CREATE TEMPORARY TABLE T5
+
+SELECT T3.`sent_by` FROM T3 
+INNER JOIN T4 ON (T3.`sent_by` = T4.`sent_by`) 
+LEFT OUTER JOIN T2 ON (T3.`sent_by` = T2.`sent_by`) 
+WHERE T2.`sent_by` IS NULL GROUP BY T3.`sent_by`;
+
+
+
+SELECT `user`.`id`, CONCAT(`user`.`name`, ' ', `user`.`lastname`) AS `Имя пользователя` FROM T5 INNER JOIN `user` ON (T5.`sent_by` = `user`.`id`);
+
+DROP TABLE IF EXISTS T2;
+
+DROP TABLE IF EXISTS T3;
+
+DROP TABLE IF EXISTS T4;
+
+DROP TABLE IF EXISTS T5;
+
+
+
+END$$
+delimiter ;
+
+#Создание процедуры для получения инфы о сущности.
+delimiter $$
+
+CREATE PROCEDURE `object_info` (objectid INT)
+
+BEGIN
+
+
+DROP TABLE IF EXISTS T1;
+
+DROP TABLE IF EXISTS T2;
+
+
+
+CREATE TEMPORARY TABLE T1 
+
+SELECT `user_id`, `object_id`, `sent_by`, CONCAT(`user`.`name`, ' ', `user`.`lastname`) AS `name` FROM `like`
+
+INNER JOIN `object` ON (`like`.`object_id` = `object`.`id`)
+
+INNER JOIN `user` ON (`like`.`sent_by` = `user`.`id`)
+
+WHERE `like`.`object_id` = objectid;
+
+
+
+SET @a := (SELECT COUNT(`object_id`) FROM T1 GROUP by `object_id`);
+
+SET @b := (SELECT GROUP_CONCAT(DISTINCT `name`) FROM T1);
+
+
+
+CREATE TEMPORARY TABLE T2 (
+`ID объекта` INT PRIMARY KEY ,
+`Лайков всего` INT ,
+`Лайки поставили` VARCHAR (1000));
+
+
+INSERT INTO T2 (`ID объекта`, `Лайков всего`, `Лайки поставили`) VALUES (objectid, @a, @b);
+
+
+
+SELECT * FROM T2;
+
+
+
+DROP TABLE IF EXISTS T1;
+
+DROP TABLE IF EXISTS T2;
+
+
+
+END$$
+
+delimiter ;
+
+#Процедура добавления лайка
+delimiter $$
+
+CREATE PROCEDURE `like_send` (objid INT, sentby INT)
+
+BEGIN
+
+INSERT INTO
+  `like`
+SET
+  `object_id` = objid, `sent_by` = sentby
+
+ON DUPLICATE KEY UPDATE
+  `object_id` = objid, `sent_by` = sentby;
+
+END$$
+
+delimiter ;
+
+#Процедура удаления лайка
+delimiter $$
+
+CREATE PROCEDURE `like_delete` (objid INT, sentby INT)
+
+BEGIN
+
+DELETE FROM
+  `like`
+
+WHERE
+  `object_id` = objid AND `sent_by` = sentby;
+
+END$$
+
+delimiter ;
